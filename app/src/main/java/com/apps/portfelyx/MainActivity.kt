@@ -13,12 +13,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -45,12 +52,52 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CoinListScreen(modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.fillMaxSize().padding(16.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        CoinCard(coin = sampleCoins[0])
-        CoinCard(coin = sampleCoins[1])
-        CoinCard(coin = sampleCoins[2])
+        var selectedFilter by remember { mutableStateOf("Всі") }
+        val visibleCoins = when (selectedFilter) {
+            "Зростають" -> sampleCoins.filter { it.price_change_percentage_24h >= 0 }
+            "Падають" -> sampleCoins.filter { it.price_change_percentage_24h < 0 }
+            else -> sampleCoins
+        }
+
+        ChangeFilterRow(
+            options = changeFilters,
+            selected = selectedFilter,
+            onSelect = { selectedFilter = it }
+        )
+
+        if (visibleCoins.isEmpty()) {
+            Text("Нічого не знайдено")
+        } else {
+            for (coin in visibleCoins) {
+                CoinCard(coin = coin)
+            }
+        }
+    }
+}
+
+val changeFilters = listOf("Всі", "Зростають", "Падають")
+
+@Composable
+fun ChangeFilterRow(
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        for (option in options) {
+            FilterChip(
+                selected = (option == selected),
+                onClick = { onSelect(option) },
+                label = { Text(option) }
+            )
+        }
     }
 }
 
