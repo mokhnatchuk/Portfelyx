@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,21 +52,21 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun CoinListScreen(modifier: Modifier = Modifier) {
+    var selectedFilter by remember { mutableStateOf("Всі") }
+    val visibleCoins = when (selectedFilter) {
+        "Зростають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h >= 0 }
+        "Падають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h < 0 }
+        else -> sampleCoins
+    }
+
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        var selectedFilter by remember { mutableStateOf("Всі") }
-        val visibleCoins = when (selectedFilter) {
-            "Зростають" -> sampleCoins.filter { it.price_change_percentage_24h >= 0 }
-            "Падають" -> sampleCoins.filter { it.price_change_percentage_24h < 0 }
-            else -> sampleCoins
-        }
-
         ChangeFilterRow(
             options = changeFilters,
             selected = selectedFilter,
-            onSelect = { selectedFilter = it }
+            onSelect = { newFilter -> selectedFilter = newFilter }
         )
 
         if (visibleCoins.isEmpty()) {
@@ -88,7 +89,7 @@ fun ChangeFilterRow(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         for (option in options) {
