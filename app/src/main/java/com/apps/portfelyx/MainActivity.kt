@@ -23,15 +23,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.apps.portfelyx.ui.theme.PortfelyxTheme
 
 class MainActivity : ComponentActivity() {
@@ -51,9 +48,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CoinListScreen(modifier: Modifier = Modifier) {
-    var selectedFilter by remember { mutableStateOf("Всі") }
-    val visibleCoins = when (selectedFilter) {
+fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel()) {
+    val uiState = viewModel.uiState
+    val visibleCoins = when (uiState.selectedFilter) {
         "Зростають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h >= 0 }
         "Падають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h < 0 }
         else -> sampleCoins
@@ -65,8 +62,8 @@ fun CoinListScreen(modifier: Modifier = Modifier) {
     ) {
         ChangeFilterRow(
             options = changeFilters,
-            selected = selectedFilter,
-            onSelect = { newFilter -> selectedFilter = newFilter }
+            selected = uiState.selectedFilter,
+            onSelect = { newFilter -> viewModel.selectFilter(newFilter) }
         )
 
         if (visibleCoins.isEmpty()) {
