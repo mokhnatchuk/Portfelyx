@@ -29,26 +29,43 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.compose.foundation.clickable
 import com.apps.portfelyx.ui.theme.PortfelyxTheme
 
 class MainActivity : ComponentActivity() {
-    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             PortfelyxTheme {
-                Scaffold(modifier = Modifier.fillMaxSize(), topBar = {TopAppBar(title = {Text("Portfelyx")}) }
-                ) { innerPadding ->
-                    CoinListScreen(modifier = Modifier.padding(innerPadding))
+                val navController = rememberNavController()
+                NavHost(navController = navController, startDestination = "coins") {
+                    composable("coins") {
+                        CoinListScreen(
+                            onItemClick = { coinId ->
+                                navController.navigate("coin/$coinId")
+                            }
+                        )
+                    }
+                    composable("coin/{coinId}") { backStackEntry ->
+                        val coinId = backStackEntry.arguments?.getString("coinId") ?: ""
+                        CoinDetailsScreen(
+                            coinId = coinId,
+                            onBackClick = { navController.navigateUp() }
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel()) {
+fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel(), onItemClick: (String) -> Unit) {
     val uiState = viewModel.uiState
     val visibleCoins = when (uiState.selectedFilter) {
         "Зростають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h >= 0 }
@@ -56,21 +73,27 @@ fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel =
         else -> sampleCoins
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ChangeFilterRow(
-            options = changeFilters,
-            selected = uiState.selectedFilter,
-            onSelect = { newFilter -> viewModel.selectFilter(newFilter) }
-        )
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = { TopAppBar(title = { Text("Portfelyx") }) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier.padding(innerPadding).fillMaxSize()
+                .verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ChangeFilterRow(
+                options = changeFilters,
+                selected = uiState.selectedFilter,
+                onSelect = { newFilter -> viewModel.selectFilter(newFilter) }
+            )
 
-        if (visibleCoins.isEmpty()) {
-            Text("Нічого не знайдено")
-        } else {
-            for (coin in visibleCoins) {
-                CoinCard(coin = coin)
+            if (visibleCoins.isEmpty()) {
+                Text("Нічого не знайдено")
+            } else {
+                for (coin in visibleCoins) {
+                    CoinCard(coin = coin, onClick = { onItemClick(coin.id) })
+                }
             }
         }
     }
@@ -100,8 +123,8 @@ fun ChangeFilterRow(
 }
 
 @Composable
-fun CoinCard(coin: Coin, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.fillMaxWidth()) {
+fun CoinCard(coin: Coin, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -130,6 +153,6 @@ fun CoinCard(coin: Coin, modifier: Modifier = Modifier) {
 @Composable
 fun CoinListScreenPreview() {
     PortfelyxTheme {
-        CoinListScreen()
+        CoinListScreen(onItemClick = {})
     }
 }
