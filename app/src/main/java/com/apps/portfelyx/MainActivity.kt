@@ -33,6 +33,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.apps.portfelyx.ui.theme.PortfelyxTheme
 
 class MainActivity : ComponentActivity() {
@@ -42,18 +48,29 @@ class MainActivity : ComponentActivity() {
         setContent {
             PortfelyxTheme {
                 val navController = rememberNavController()
+                val settingsViewModel: SettingsViewModel = viewModel()
+                val currency by settingsViewModel.currency.collectAsState()
+
                 NavHost(navController = navController, startDestination = "coins") {
                     composable("coins") {
                         CoinListScreen(
-                            onItemClick = { coinId ->
-                                navController.navigate("coin/$coinId")
-                            }
+                            currency = currency,
+                            onItemClick = { coinId -> navController.navigate("coin/$coinId") },
+                            onSettingsClick = { navController.navigate("settings") }
                         )
                     }
                     composable("coin/{coinId}") { backStackEntry ->
                         val coinId = backStackEntry.arguments?.getString("coinId") ?: ""
                         CoinDetailsScreen(
                             coinId = coinId,
+                            currency = currency,
+                            onBackClick = { navController.navigateUp() }
+                        )
+                    }
+                    composable("settings") {
+                        SettingsScreen(
+                            currency = currency,
+                            onCurrencyChange = { settingsViewModel.setCurrency(it) },
                             onBackClick = { navController.navigateUp() }
                         )
                     }
@@ -65,7 +82,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel(), onItemClick: (String) -> Unit) {
+fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel(), currency: String, onItemClick: (String) -> Unit, onSettingsClick: () -> Unit) {
     val uiState = viewModel.uiState
     val visibleCoins = when (uiState.selectedFilter) {
         "Зростають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h >= 0 }
@@ -75,7 +92,16 @@ fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel =
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { TopAppBar(title = { Text("Portfelyx") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Portfelyx") },
+                actions = {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(Icons.Default.Settings, contentDescription = "Налаштування")
+                    }
+                }
+            )
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier.padding(innerPadding).fillMaxSize()
@@ -92,7 +118,10 @@ fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel =
                 Text("Нічого не знайдено")
             } else {
                 for (coin in visibleCoins) {
-                    CoinCard(coin = coin, onClick = { onItemClick(coin.id) })
+                    CoinCard(
+                        coin = coin,
+                        priceText = formatPrice(coin.current_price, currency),
+                        onClick = { onItemClick(coin.id) })
                 }
             }
         }
@@ -123,7 +152,7 @@ fun ChangeFilterRow(
 }
 
 @Composable
-fun CoinCard(coin: Coin, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -142,7 +171,7 @@ fun CoinCard(coin: Coin, onClick: () -> Unit, modifier: Modifier = Modifier) {
             }
             Column {
                 Text(text = coin.name)
-                Text(text = "$${coin.current_price}")
+                Text(text = priceText)
                 Text(text = "${coin.price_change_percentage_24h}%")
             }
         }
@@ -153,6 +182,6 @@ fun CoinCard(coin: Coin, onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 fun CoinListScreenPreview() {
     PortfelyxTheme {
-        CoinListScreen(onItemClick = {})
+        CoinListScreen(currency = "usd", onItemClick = {},  onSettingsClick = {})
     }
 }

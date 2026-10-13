@@ -32,3 +32,18 @@ fun coinIcon(coinId: String): Int {
         else -> R.drawable.coin_bitcoin
     }
 }
+
+val exchangeRates = mapOf("usd" to 1.0, "eur" to 0.95, "uah" to 44.0)
+val currencySymbols = mapOf("usd" to "$", "eur" to "€", "uah" to "₴")
+
+fun formatPrice(priceUsd: Double, currency: String): String {
+    val rate = exchangeRates[currency] ?: 1.0
+    val symbol = currencySymbols[currency] ?: "$"
+    val converted = priceUsd * rate
+    val rounded = if (converted >= 100) {
+        "%.2f".format(converted)
+    } else {
+        "%.4f".format(converted)
+    }
+    return "$symbol$rounded"
+}

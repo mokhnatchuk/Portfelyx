@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CoinDetailsScreen(coinId: String, onBackClick: () -> Unit) {
+fun CoinDetailsScreen(coinId: String, currency: String, onBackClick: () -> Unit) {
     val coin = sampleCoins.find { it.id == coinId }
 
     Scaffold(
@@ -62,8 +62,8 @@ fun CoinDetailsScreen(coinId: String, onBackClick: () -> Unit) {
                 )
                 Text("Ціна: $${coin.current_price}")
                 Text("Зміна за 24 год: ${coin.price_change_percentage_24h}%")
-                Text("Капіталізація: $${coin.market_cap}")
-                Text("Обсяг торгів за 24 год: $${coin.total_volume}")
+                Text("Капіталізація: ${formatPrice(coin.market_cap / 1_000_000_000, currency)} млрд")
+                Text("Обсяг торгів за 24 год: ${formatPrice(coin.total_volume / 1_000_000_000, currency)} млрд")
                 Text("Максимум за 24 год: $${coin.high_24h}")
                 Text("Мінімум за 24 год: $${coin.low_24h}")
             }
