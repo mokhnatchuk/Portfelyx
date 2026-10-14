@@ -36,7 +36,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.apps.portfelyx.ui.theme.PortfelyxTheme
@@ -50,10 +52,16 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val settingsViewModel: SettingsViewModel = viewModel()
                 val currency by settingsViewModel.currency.collectAsState()
+                val coinListViewModel: CoinListViewModel = viewModel()
+
+                LaunchedEffect(currency) {
+                    coinListViewModel.loadCoins(currency)
+                }
 
                 NavHost(navController = navController, startDestination = "coins") {
                     composable("coins") {
                         CoinListScreen(
+                            viewModel = coinListViewModel,
                             currency = currency,
                             onItemClick = { coinId -> navController.navigate("coin/$coinId") },
                             onSettingsClick = { navController.navigate("settings") }
@@ -64,7 +72,8 @@ class MainActivity : ComponentActivity() {
                         CoinDetailsScreen(
                             coinId = coinId,
                             currency = currency,
-                            onBackClick = { navController.navigateUp() }
+                            onBackClick = { navController.navigateUp() },
+                            viewModel = coinListViewModel
                         )
                     }
                     composable("settings") {
@@ -84,10 +93,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel(), currency: String, onItemClick: (String) -> Unit, onSettingsClick: () -> Unit) {
     val uiState = viewModel.uiState
+    val coins = uiState.coins
     val visibleCoins = when (uiState.selectedFilter) {
-        "Зростають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h >= 0 }
-        "Падають" -> sampleCoins.filter { coin -> coin.price_change_percentage_24h < 0 }
-        else -> sampleCoins
+        "Зростають" -> coins.filter { it.price_change_percentage_24h >= 0 }
+        "Падають" -> coins.filter { it.price_change_percentage_24h < 0 }
+        else -> coins
     }
 
     Scaffold(
@@ -114,7 +124,21 @@ fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel =
                 onSelect = { newFilter -> viewModel.selectFilter(newFilter) }
             )
 
-            if (visibleCoins.isEmpty()) {
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (uiState.loadError) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Не вдалося завантажити дані")
+                }
+            } else if (visibleCoins.isEmpty()) {
                 Text("Нічого не знайдено")
             } else {
                 for (coin in visibleCoins) {

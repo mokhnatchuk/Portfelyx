@@ -21,11 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CoinDetailsScreen(coinId: String, currency: String, onBackClick: () -> Unit) {
-    val coin = sampleCoins.find { it.id == coinId }
+fun CoinDetailsScreen(coinId: String, currency: String, onBackClick: () -> Unit, viewModel: CoinListViewModel = viewModel()) {
+    val coin = viewModel.uiState.coins.find { it.id == coinId }
 
     Scaffold(
         topBar = {
@@ -60,12 +61,12 @@ fun CoinDetailsScreen(coinId: String, currency: String, onBackClick: () -> Unit)
                     contentDescription = coin.name,
                     modifier = Modifier.size(96.dp).align(Alignment.CenterHorizontally)
                 )
-                Text("Ціна: $${coin.current_price}")
+                Text("Ціна: ${formatPrice(coin.current_price, currency)}")
                 Text("Зміна за 24 год: ${coin.price_change_percentage_24h}%")
                 Text("Капіталізація: ${formatPrice(coin.market_cap / 1_000_000_000, currency)} млрд")
                 Text("Обсяг торгів за 24 год: ${formatPrice(coin.total_volume / 1_000_000_000, currency)} млрд")
-                Text("Максимум за 24 год: $${coin.high_24h}")
-                Text("Мінімум за 24 год: $${coin.low_24h}")
+                Text("Максимум за 24 год: ${formatPrice(coin.high_24h, currency)}")
+                Text("Мінімум за 24 год: ${formatPrice(coin.low_24h, currency)}")
             }
         }
     }

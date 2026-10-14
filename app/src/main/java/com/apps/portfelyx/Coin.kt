@@ -13,15 +13,6 @@ data class Coin(
     val low_24h: Double
 )
 
-val sampleCoins = listOf(
-    Coin("bitcoin", "btc", "Bitcoin", "", 77671.0, -0.95, 1_538_000_000_000.0, 45_000_000_000.0, 78_900.0, 76_100.0),
-    Coin("ethereum", "eth", "Ethereum", "", 3420.5, 1.24, 412_000_000_000.0, 18_000_000_000.0, 3_480.0, 3_360.0),
-    Coin("solana", "sol", "Solana", "", 172.8, 3.61, 83_000_000_000.0, 4_200_000_000.0, 176.4, 168.2),
-    Coin("cardano", "ada", "Cardano", "", 0.234, -2.31, 8_200_000_000.0, 320_000_000.0, 0.241, 0.229),
-    Coin("dogecoin", "doge", "Dogecoin", "", 0.092, 5.12, 13_600_000_000.0, 900_000_000.0, 0.095, 0.089),
-    Coin("tether", "usdt", "Tether", "", 0.999, 0.01, 172_000_000_000.0, 60_000_000_000.0, 1.001, 0.998)
-)
-
 fun coinIcon(coinId: String): Int {
     return when (coinId) {
         "ethereum" -> R.drawable.coin_ethereum
@@ -33,17 +24,14 @@ fun coinIcon(coinId: String): Int {
     }
 }
 
-val exchangeRates = mapOf("usd" to 1.0, "eur" to 0.95, "uah" to 44.0)
 val currencySymbols = mapOf("usd" to "$", "eur" to "€", "uah" to "₴")
 
-fun formatPrice(priceUsd: Double, currency: String): String {
-    val rate = exchangeRates[currency] ?: 1.0
+fun formatPrice(price: Double, currency: String): String {
     val symbol = currencySymbols[currency] ?: "$"
-    val converted = priceUsd * rate
-    val rounded = if (converted >= 100) {
-        "%.2f".format(converted)
+    val rounded = if (price >= 100) {
+        "%.2f".format(price)
     } else {
-        "%.4f".format(converted)
+        "%.4f".format(price)
     }
     return "$symbol$rounded"
 }
