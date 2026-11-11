@@ -14,7 +14,8 @@ data class CoinListUiState(
     val selectedFilter: String = "Всі",
     val coins: List<Coin> = emptyList(),
     val isLoading: Boolean = false,
-    val errorMessage: String = ""
+    val errorMessage: String = "",
+    val loadedCurrency: String = ""
 )
 
 class CoinListViewModel : ViewModel() {
@@ -25,19 +26,29 @@ class CoinListViewModel : ViewModel() {
         uiState = uiState.copy(selectedFilter = newFilter)
     }
 
-    fun loadCoins(currency: String) {
+    fun loadCoins(currency: String, forceReload: Boolean = false) {
+        if (!forceReload && uiState.coins.isNotEmpty() && uiState.loadedCurrency == currency) {
+            return
+        }
+
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, errorMessage = "")
             try {
                 val responseList = coinGeckoApi.getCoins(BuildConfig.COINGECKO_API_KEY, currency)
                 val loadedCoins = ArrayList<Coin>(responseList.size)
+                val seenCoinIds = HashSet<String>(responseList.size)
+
                 for (coinResponse in responseList) {
-                    loadedCoins.add(coinResponse.toCoin())
+                    if (seenCoinIds.add(coinResponse.id)) {
+                        loadedCoins.add(coinResponse.toCoin())
+                    }
                 }
+
                 uiState = uiState.copy(
                     coins = loadedCoins,
                     isLoading = false,
-                    errorMessage = ""
+                    errorMessage = "",
+                    loadedCurrency = currency
                 )
             } catch (serializationError: SerializationException) {
                 uiState = uiState.copy(

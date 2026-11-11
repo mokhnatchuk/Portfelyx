@@ -10,13 +10,15 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -56,7 +58,7 @@ class MainActivity : ComponentActivity() {
                 val coinListViewModel: CoinListViewModel = viewModel()
 
                 LaunchedEffect(currency) {
-                    coinListViewModel.loadCoins(currency)
+                    coinListViewModel.loadCoins(currency, forceReload = false)
                 }
 
                 NavHost(navController = navController, startDestination = "coins") {
@@ -136,21 +138,19 @@ fun CoinListScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ChangeFilterRow(
                 options = changeFilters,
                 selected = uiState.selectedFilter,
-                onSelect = { newFilter -> viewModel.selectFilter(newFilter) }
+                onSelect = { newFilter -> viewModel.selectFilter(newFilter) },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp),
+                        .fillMaxSize()
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
@@ -158,23 +158,22 @@ fun CoinListScreen(
             } else if (uiState.errorMessage.isNotEmpty()) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp),
+                        .fillMaxSize()
+                        .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
                 ) {
                     Text(text = uiState.errorMessage)
-                    Button(onClick = { viewModel.loadCoins(currency) }) {
+                    Button(onClick = { viewModel.loadCoins(currency, forceReload = true) }) {
                         Text(text = "Спробувати ще")
                     }
                 }
             } else if (visibleCoins.isEmpty()) {
-                Column(
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     if (coins.isEmpty()) {
                         Text(text = "Сервер повернув порожній список монет.")
@@ -183,12 +182,21 @@ fun CoinListScreen(
                     }
                 }
             } else {
-                for (coin in visibleCoins) {
-                    CoinCard(
-                        coin = coin,
-                        priceText = formatPrice(coin.current_price, currency),
-                        onClick = { onItemClick(coin.id) }
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        items = visibleCoins,
+                        key = { coinItem -> coinItem.id }
+                    ) { coinItem ->
+                        CoinCard(
+                            coin = coinItem,
+                            priceText = formatPrice(coinItem.current_price, currency),
+                            onClick = { onItemClick(coinItem.id) }
+                        )
+                    }
                 }
             }
         }
