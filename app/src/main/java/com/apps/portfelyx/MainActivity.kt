@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,13 +17,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -32,15 +42,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import com.apps.portfelyx.ui.theme.PortfelyxTheme
 
 class MainActivity : ComponentActivity() {
@@ -79,7 +80,9 @@ class MainActivity : ComponentActivity() {
                     composable("settings") {
                         SettingsScreen(
                             currency = currency,
-                            onCurrencyChange = { settingsViewModel.setCurrency(it) },
+                            onCurrencyChange = { selectedCurrency ->
+                                settingsViewModel.setCurrency(selectedCurrency)
+                            },
                             onBackClick = { navController.navigateUp() }
                         )
                     }
@@ -91,13 +94,29 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel = viewModel(), currency: String, onItemClick: (String) -> Unit, onSettingsClick: () -> Unit) {
+fun CoinListScreen(
+    modifier: Modifier = Modifier,
+    viewModel: CoinListViewModel = viewModel(),
+    currency: String,
+    onItemClick: (String) -> Unit,
+    onSettingsClick: () -> Unit
+) {
     val uiState = viewModel.uiState
     val coins = uiState.coins
-    val visibleCoins = when (uiState.selectedFilter) {
-        "Зростають" -> coins.filter { it.price_change_percentage_24h >= 0 }
-        "Падають" -> coins.filter { it.price_change_percentage_24h < 0 }
-        else -> coins
+    val visibleCoins = ArrayList<Coin>(coins.size)
+
+    for (coin in coins) {
+        if (uiState.selectedFilter == "Зростають") {
+            if (coin.price_change_percentage_24h >= 0.0) {
+                visibleCoins.add(coin)
+            }
+        } else if (uiState.selectedFilter == "Падають") {
+            if (coin.price_change_percentage_24h < 0.0) {
+                visibleCoins.add(coin)
+            }
+        } else {
+            visibleCoins.add(coin)
+        }
     }
 
     Scaffold(
@@ -114,8 +133,11 @@ fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel =
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier.padding(innerPadding).fillMaxSize()
-                .verticalScroll(rememberScrollState()).padding(16.dp),
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ChangeFilterRow(
@@ -126,26 +148,47 @@ fun CoinListScreen(modifier: Modifier = Modifier, viewModel: CoinListViewModel =
 
             if (uiState.isLoading) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (uiState.loadError) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+            } else if (uiState.errorMessage.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Не вдалося завантажити дані")
+                    Text(text = uiState.errorMessage)
+                    Button(onClick = { viewModel.loadCoins(currency) }) {
+                        Text(text = "Спробувати ще")
+                    }
                 }
             } else if (visibleCoins.isEmpty()) {
-                Text("Нічого не знайдено")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (coins.isEmpty()) {
+                        Text(text = "Сервер повернув порожній список монет.")
+                    } else {
+                        Text(text = "За обраним фільтром нічого не знайдено.")
+                    }
+                }
             } else {
                 for (coin in visibleCoins) {
                     CoinCard(
                         coin = coin,
                         priceText = formatPrice(coin.current_price, currency),
-                        onClick = { onItemClick(coin.id) })
+                        onClick = { onItemClick(coin.id) }
+                    )
                 }
             }
         }
@@ -177,7 +220,11 @@ fun ChangeFilterRow(
 
 @Composable
 fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
         Row(
             modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -206,6 +253,6 @@ fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modif
 @Composable
 fun CoinListScreenPreview() {
     PortfelyxTheme {
-        CoinListScreen(currency = "usd", onItemClick = {},  onSettingsClick = {})
+        CoinListScreen(currency = "usd", onItemClick = {}, onSettingsClick = {})
     }
 }
