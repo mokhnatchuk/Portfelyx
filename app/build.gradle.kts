@@ -7,7 +7,10 @@ plugins {
 }
 
 val localProperties = Properties()
-localProperties.load(rootProject.file("local.properties").inputStream())
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
 val coingeckoApiKey: String = localProperties.getProperty("coingecko.api.key", "")
 
 android {
@@ -59,6 +62,7 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

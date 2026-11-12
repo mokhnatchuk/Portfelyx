@@ -8,7 +8,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 
 fun sendPriceNotification(context: Context, coinName: String, priceText: String) {
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -115,6 +115,8 @@ fun CoinDetailsScreen(
             }
         } else {
             val currentPriceText = formatPrice(coin.current_price, currency)
+            val fallbackPainter = painterResource(id = coinIcon(coin.id))
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -123,17 +125,33 @@ fun CoinDetailsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Image(
-                    painter = painterResource(id = coinIcon(coin.id)),
+                AsyncImage(
+                    model = coin.image,
                     contentDescription = coin.name,
-                    modifier = Modifier.size(96.dp).align(Alignment.CenterHorizontally)
+                    placeholder = fallbackPainter,
+                    error = fallbackPainter,
+                    fallback = fallbackPainter,
+                    modifier = Modifier
+                        .size(96.dp)
+                        .align(Alignment.CenterHorizontally)
                 )
                 Text("Ціна: $currentPriceText")
                 Text("Зміна за 24 год: ${coin.price_change_percentage_24h}%")
+                if (coin.price_change_percentage_7d != null) {
+                    val formatted7d = "%.2f".format(coin.price_change_percentage_7d)
+                    Text("Зміна за 7 днів: $formatted7d%")
+                }
                 Text("Капіталізація: ${formatPrice(coin.market_cap / 1_000_000_000, currency)} млрд")
                 Text("Обсяг торгів за 24 год: ${formatPrice(coin.total_volume / 1_000_000_000, currency)} млрд")
                 Text("Максимум за 24 год: ${formatPrice(coin.high_24h, currency)}")
                 Text("Мінімум за 24 год: ${formatPrice(coin.low_24h, currency)}")
+
+                if (coin.hashing_algorithm.isNotEmpty()) {
+                    Text("Алгоритм хешування: ${coin.hashing_algorithm}")
+                }
+                if (coin.genesis_date.isNotEmpty()) {
+                    Text("Дата створення: ${coin.genesis_date}")
+                }
 
                 Button(
                     onClick = {

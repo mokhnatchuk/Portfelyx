@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
 import com.apps.portfelyx.ui.theme.PortfelyxTheme
 
 class MainActivity : ComponentActivity() {
@@ -146,56 +147,62 @@ fun CoinListScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else if (uiState.errorMessage.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
-                ) {
-                    Text(text = uiState.errorMessage)
-                    Button(onClick = { viewModel.loadCoins(currency, forceReload = true) }) {
-                        Text(text = "Спробувати ще")
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { viewModel.refreshCoins(currency) },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (uiState.isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
-                }
-            } else if (visibleCoins.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (coins.isEmpty()) {
-                        Text(text = "Сервер повернув порожній список монет.")
-                    } else {
-                        Text(text = "За обраним фільтром нічого не знайдено.")
+                } else if (uiState.errorMessage.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                    ) {
+                        Text(text = uiState.errorMessage)
+                        Button(onClick = { viewModel.loadCoins(currency, forceReload = true) }) {
+                            Text(text = "Спробувати ще")
+                        }
                     }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(
-                        items = visibleCoins,
-                        key = { coinItem -> coinItem.id }
-                    ) { coinItem ->
-                        CoinCard(
-                            coin = coinItem,
-                            priceText = formatPrice(coinItem.current_price, currency),
-                            onClick = { onItemClick(coinItem.id) }
-                        )
+                } else if (visibleCoins.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (coins.isEmpty()) {
+                            Text(text = "Сервер повернув порожній список монет.")
+                        } else {
+                            Text(text = "За обраним фільтром нічого не знайдено.")
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            items = visibleCoins,
+                            key = { coinItem -> coinItem.id }
+                        ) { coinItem ->
+                            CoinCard(
+                                coin = coinItem,
+                                priceText = formatPrice(coinItem.current_price, currency),
+                                onClick = { onItemClick(coinItem.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -228,6 +235,8 @@ fun ChangeFilterRow(
 
 @Composable
 fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val fallbackPainter = painterResource(id = coinIcon(coin.id))
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -238,9 +247,12 @@ fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modif
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box {
-                Image(
-                    painter = painterResource(id = coinIcon(coin.id)),
+                AsyncImage(
+                    model = coin.image,
                     contentDescription = coin.name,
+                    placeholder = fallbackPainter,
+                    error = fallbackPainter,
+                    fallback = fallbackPainter,
                     modifier = Modifier.size(64.dp)
                 )
                 Text(
@@ -251,7 +263,11 @@ fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modif
             Column {
                 Text(text = coin.name)
                 Text(text = priceText)
-                Text(text = "${coin.price_change_percentage_24h}%")
+                Text(text = "24 год: ${coin.price_change_percentage_24h}%")
+                if (coin.price_change_percentage_7d != null) {
+                    val formatted7d = "%.2f".format(coin.price_change_percentage_7d)
+                    Text(text = "7 дн: $formatted7d%")
+                }
             }
         }
     }

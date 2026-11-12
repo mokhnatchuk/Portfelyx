@@ -10,7 +10,10 @@ data class Coin(
     val market_cap: Double,
     val total_volume: Double,
     val high_24h: Double,
-    val low_24h: Double
+    val low_24h: Double,
+    val price_change_percentage_7d: Double? = null,
+    val genesis_date: String = "",
+    val hashing_algorithm: String = ""
 )
 
 fun coinIcon(coinId: String): Int {
