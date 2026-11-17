@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -27,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -140,6 +142,23 @@ fun CoinListScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = { newText -> viewModel.updateSearchQuery(newText, currency) },
+                label = { Text("Пошук монети") },
+                singleLine = true,
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.clearSearch(currency) }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Очистити")
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+
             ChangeFilterRow(
                 options = changeFilters,
                 selected = uiState.selectedFilter,
@@ -175,16 +194,32 @@ fun CoinListScreen(
                         }
                     }
                 } else if (visibleCoins.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (coins.isEmpty()) {
-                            Text(text = "Сервер повернув порожній список монет.")
-                        } else {
-                            Text(text = "За обраним фільтром нічого не знайдено.")
+                    val trimmedSearch = uiState.searchQuery.trim()
+                    if (trimmedSearch.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                        ) {
+                            Text(text = "За запитом \"$trimmedSearch\" нічого не знайдено.")
+                            Button(onClick = { viewModel.clearSearch(currency) }) {
+                                Text(text = "Очистити пошук")
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (coins.isEmpty()) {
+                                Text(text = "Сервер повернув порожній список монет.")
+                            } else {
+                                Text(text = "За обраним фільтром нічого не знайдено.")
+                            }
                         }
                     }
                 } else {

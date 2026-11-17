@@ -37,6 +37,16 @@ data class CoinDetailResponse(
     val market_data: MarketDataResponse? = null
 )
 
+@Serializable
+data class SearchCoinItem(
+    val id: String = ""
+)
+
+@Serializable
+data class CoinSearchResponse(
+    val coins: List<SearchCoinItem> = emptyList()
+)
+
 fun CoinResponse.toCoin(): Coin {
     var cleanImageUrl = image.trim()
     if (cleanImageUrl.startsWith("http://")) {
@@ -62,9 +72,16 @@ interface CoinGeckoApi {
     suspend fun getCoins(
         @Header("x-cg-demo-api-key") apiKey: String,
         @Query("vs_currency") currency: String,
+        @Query("ids") ids: String? = null,
         @Query("per_page") perPage: Int = 20,
         @Query("page") page: Int = 1
     ): List<CoinResponse>
+
+    @GET("search")
+    suspend fun searchCoins(
+        @Header("x-cg-demo-api-key") apiKey: String,
+        @Query("query") query: String
+    ): CoinSearchResponse
 
     @GET("coins/{id}")
     suspend fun getCoinDetail(
