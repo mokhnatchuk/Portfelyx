@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -64,6 +66,8 @@ fun sendPriceNotification(context: Context, coinName: String, priceText: String)
 fun CoinDetailsScreen(
     coinId: String,
     currency: String,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onBackClick: () -> Unit,
     viewModel: CoinListViewModel = viewModel()
 ) {
@@ -75,6 +79,14 @@ fun CoinDetailsScreen(
         if (item.id == coinId) {
             selectedCoin = item
             break
+        }
+    }
+    if (selectedCoin == null) {
+        for (item in viewModel.uiState.favoriteCoins) {
+            if (item.id == coinId) {
+                selectedCoin = item
+                break
+            }
         }
     }
     val coin = selectedCoin
@@ -98,6 +110,17 @@ fun CoinDetailsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+                actions = {
+                    if (coin != null) {
+                        IconButton(onClick = onToggleFavorite) {
+                            if (isFavorite) {
+                                Icon(Icons.Default.Favorite, contentDescription = "Прибрати з добірки")
+                            } else {
+                                Icon(Icons.Default.FavoriteBorder, contentDescription = "Додати в добірку")
+                            }
+                        }
                     }
                 }
             )
@@ -154,6 +177,17 @@ fun CoinDetailsScreen(
                 }
 
                 Button(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    if (isFavorite) {
+                        Text("Прибрати з добірки")
+                    } else {
+                        Text("Додати в добірку")
+                    }
+                }
+
+                Button(
                     onClick = {
                         if (Build.VERSION.SDK_INT >= 33) {
                             val status = ContextCompat.checkSelfPermission(
@@ -171,7 +205,7 @@ fun CoinDetailsScreen(
                             notificationStatusText = "Сповіщення з ціною надіслано."
                         }
                     },
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
                     Text("Надіслати ціну в сповіщення")
                 }

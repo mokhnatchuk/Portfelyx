@@ -20,6 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,6 +31,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -58,6 +63,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val settingsViewModel: SettingsViewModel = viewModel()
                 val currency by settingsViewModel.currency.collectAsState()
+                val favoriteIds by settingsViewModel.favoriteIds.collectAsState()
                 val coinListViewModel: CoinListViewModel = viewModel()
 
                 LaunchedEffect(currency) {
@@ -69,15 +75,41 @@ class MainActivity : ComponentActivity() {
                         CoinListScreen(
                             viewModel = coinListViewModel,
                             currency = currency,
+                            favoriteIds = favoriteIds,
+                            onToggleFavorite = { coinId ->
+                                settingsViewModel.toggleFavorite(coinId)
+                            },
                             onItemClick = { coinId -> navController.navigate("coin/$coinId") },
+                            onFavoritesClick = { navController.navigate("favorites") },
                             onSettingsClick = { navController.navigate("settings") }
+                        )
+                    }
+                    composable("favorites") {
+                        FavoriteCoinsScreen(
+                            viewModel = coinListViewModel,
+                            favoriteIds = favoriteIds,
+                            currency = currency,
+                            onItemClick = { coinId -> navController.navigate("coin/$coinId") },
+                            onToggleFavorite = { coinId ->
+                                settingsViewModel.toggleFavorite(coinId)
+                            },
+                            onCatalogClick = {
+                                navController.popBackStack("coins", inclusive = false)
+                            },
+                            onSettingsClick = { navController.navigate("settings") },
+                            onBackClick = { navController.navigateUp() }
                         )
                     }
                     composable("coin/{coinId}") { backStackEntry ->
                         val coinId = backStackEntry.arguments?.getString("coinId") ?: ""
+                        val isCoinFavorite = favoriteIds.contains(coinId)
                         CoinDetailsScreen(
                             coinId = coinId,
                             currency = currency,
+                            isFavorite = isCoinFavorite,
+                            onToggleFavorite = {
+                                settingsViewModel.toggleFavorite(coinId)
+                            },
                             onBackClick = { navController.navigateUp() },
                             viewModel = coinListViewModel
                         )
@@ -103,7 +135,10 @@ fun CoinListScreen(
     modifier: Modifier = Modifier,
     viewModel: CoinListViewModel = viewModel(),
     currency: String,
+    favoriteIds: Set<String> = emptySet(),
+    onToggleFavorite: (String) -> Unit = {},
     onItemClick: (String) -> Unit,
+    onFavoritesClick: () -> Unit = {},
     onSettingsClick: () -> Unit
 ) {
     val uiState = viewModel.uiState
@@ -130,11 +165,30 @@ fun CoinListScreen(
             TopAppBar(
                 title = { Text("Portfelyx") },
                 actions = {
+                    IconButton(onClick = onFavoritesClick) {
+                        Icon(Icons.Default.Favorite, contentDescription = "Моя добірка")
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Налаштування")
                     }
                 }
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = true,
+                    onClick = {},
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Каталог") },
+                    label = { Text("Каталог") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onFavoritesClick,
+                    icon = { Icon(Icons.Default.Favorite, contentDescription = "Добірка") },
+                    label = { Text("Добірка") }
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -232,9 +286,12 @@ fun CoinListScreen(
                             items = visibleCoins,
                             key = { coinItem -> coinItem.id }
                         ) { coinItem ->
+                            val isCoinFavorite = favoriteIds.contains(coinItem.id)
                             CoinCard(
                                 coin = coinItem,
                                 priceText = formatPrice(coinItem.current_price, currency),
+                                isFavorite = isCoinFavorite,
+                                onFavoriteClick = { onToggleFavorite(coinItem.id) },
                                 onClick = { onItemClick(coinItem.id) }
                             )
                         }
@@ -269,7 +326,14 @@ fun ChangeFilterRow(
 }
 
 @Composable
-fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun CoinCard(
+    coin: Coin,
+    priceText: String,
+    isFavorite: Boolean = false,
+    onFavoriteClick: () -> Unit = {},
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val fallbackPainter = painterResource(id = coinIcon(coin.id))
 
     Card(
@@ -278,8 +342,11 @@ fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modif
             .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box {
                 AsyncImage(
@@ -295,13 +362,22 @@ fun CoinCard(coin: Coin, priceText: String, onClick: () -> Unit, modifier: Modif
                     modifier = Modifier.align(Alignment.BottomEnd)
                 )
             }
-            Column {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(text = coin.name)
                 Text(text = priceText)
                 Text(text = "24 год: ${coin.price_change_percentage_24h}%")
                 if (coin.price_change_percentage_7d != null) {
                     val formatted7d = "%.2f".format(coin.price_change_percentage_7d)
                     Text(text = "7 дн: $formatted7d%")
+                }
+            }
+            IconButton(onClick = onFavoriteClick) {
+                if (isFavorite) {
+                    Icon(Icons.Default.Favorite, contentDescription = "Прибрати з добірки")
+                } else {
+                    Icon(Icons.Default.FavoriteBorder, contentDescription = "Додати в добірку")
                 }
             }
         }

@@ -23,7 +23,10 @@ data class CoinListUiState(
     val isRefreshing: Boolean = false,
     val errorMessage: String = "",
     val loadedCurrency: String = "",
-    val loadedQuery: String = ""
+    val loadedQuery: String = "",
+    val favoriteCoins: List<Coin> = emptyList(),
+    val isFavoritesLoading: Boolean = false,
+    val favoritesErrorMessage: String = ""
 )
 
 class CoinListViewModel : ViewModel() {
@@ -69,6 +72,76 @@ class CoinListViewModel : ViewModel() {
 
     fun refreshCoins(currency: String) {
         loadCoins(currency = currency, forceReload = true, isPullRefresh = true)
+    }
+
+    fun loadFavoriteCoins(favoriteIds: Set<String>, currency: String) {
+        if (favoriteIds.isEmpty()) {
+            uiState = uiState.copy(
+                favoriteCoins = emptyList(),
+                isFavoritesLoading = false,
+                favoritesErrorMessage = ""
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            uiState = uiState.copy(isFavoritesLoading = true, favoritesErrorMessage = "")
+            try {
+                val idsBuilder = StringBuilder()
+                for (coinId in favoriteIds) {
+                    if (coinId.isNotEmpty()) {
+                        if (idsBuilder.isNotEmpty()) {
+                            idsBuilder.append(",")
+                        }
+                        idsBuilder.append(coinId)
+                    }
+                }
+
+                val idsString = idsBuilder.toString()
+                val loadedFavorites = ArrayList<Coin>()
+
+                if (idsString.isNotEmpty()) {
+                    val responseList = coinGeckoApi.getCoins(
+                        apiKey = BuildConfig.COINGECKO_API_KEY,
+                        currency = currency,
+                        ids = idsString
+                    )
+                    val seenCoinIds = HashSet<String>(responseList.size)
+                    for (coinResponse in responseList) {
+                        if (seenCoinIds.add(coinResponse.id)) {
+                            loadedFavorites.add(coinResponse.toCoin())
+                        }
+                    }
+                }
+
+                uiState = uiState.copy(
+                    favoriteCoins = loadedFavorites,
+                    isFavoritesLoading = false,
+                    favoritesErrorMessage = ""
+                )
+            } catch (serializationError: SerializationException) {
+                uiState = uiState.copy(
+                    isFavoritesLoading = false,
+                    favoritesErrorMessage = "Помилка читання даних: відповідь сервера має неправильний формат."
+                )
+            } catch (httpError: HttpException) {
+                val statusCode = httpError.code()
+                uiState = uiState.copy(
+                    isFavoritesLoading = false,
+                    favoritesErrorMessage = "Сервер повернув помилку (код $statusCode). Спробуйте пізніше."
+                )
+            } catch (networkError: IOException) {
+                uiState = uiState.copy(
+                    isFavoritesLoading = false,
+                    favoritesErrorMessage = "Немає підключення до інтернету. Перевірте мережу."
+                )
+            } catch (unknownError: Exception) {
+                uiState = uiState.copy(
+                    isFavoritesLoading = false,
+                    favoritesErrorMessage = "Сталася невідома помилка під час завантаження добірки."
+                )
+            }
+        }
     }
 
     fun loadCoins(currency: String, forceReload: Boolean = false, isPullRefresh: Boolean = false) {
