@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -25,6 +26,7 @@ data class CoinListUiState(
     val loadedCurrency: String = "",
     val loadedQuery: String = "",
     val favoriteCoins: List<Coin> = emptyList(),
+    val loadedFavoritesCurrency: String = "",
     val isFavoritesLoading: Boolean = false,
     val favoritesErrorMessage: String = ""
 )
@@ -34,7 +36,11 @@ class CoinListViewModel : ViewModel() {
         private set
 
     private var searchJob: Job? = null
+    private var catalogJob: Job? = null
+    private var favoritesJob: Job? = null
     private var savedCatalogCoins: List<Coin> = emptyList()
+    private var savedCatalogCurrency: String = ""
+    private var loadedFavoriteIds: Set<String> = emptySet()
 
     fun selectFilter(newFilter: String) {
         uiState = uiState.copy(selectedFilter = newFilter)
@@ -46,12 +52,14 @@ class CoinListViewModel : ViewModel() {
 
         val trimmedQuery = newQuery.trim()
         if (trimmedQuery.isEmpty()) {
-            if (savedCatalogCoins.isNotEmpty() && uiState.loadedCurrency == currency) {
+            if (savedCatalogCoins.isNotEmpty() && savedCatalogCurrency == currency) {
+                catalogJob?.cancel()
                 uiState = uiState.copy(
                     coins = savedCatalogCoins,
                     isLoading = false,
                     isRefreshing = false,
                     errorMessage = "",
+                    loadedCurrency = savedCatalogCurrency,
                     loadedQuery = ""
                 )
             } else {
@@ -62,7 +70,7 @@ class CoinListViewModel : ViewModel() {
 
         searchJob = viewModelScope.launch {
             delay(500)
-            loadCoins(currency = currency, forceReload = true)
+            loadCoins(currency = currency, forceReload = true, cancelPendingSearch = false)
         }
     }
 
@@ -74,17 +82,51 @@ class CoinListViewModel : ViewModel() {
         loadCoins(currency = currency, forceReload = true, isPullRefresh = true)
     }
 
-    fun loadFavoriteCoins(favoriteIds: Set<String>, currency: String) {
+    fun loadFavoriteCoins(
+        favoriteIds: Set<String>,
+        currency: String,
+        forceReload: Boolean = false
+    ) {
         if (favoriteIds.isEmpty()) {
+            favoritesJob?.cancel()
+            loadedFavoriteIds = emptySet()
             uiState = uiState.copy(
                 favoriteCoins = emptyList(),
+                loadedFavoritesCurrency = currency,
                 isFavoritesLoading = false,
                 favoritesErrorMessage = ""
             )
             return
         }
 
-        viewModelScope.launch {
+        if (!forceReload &&
+            uiState.loadedFavoritesCurrency == currency &&
+            uiState.favoritesErrorMessage.isEmpty() &&
+            uiState.favoriteCoins.isNotEmpty()
+        ) {
+            if (loadedFavoriteIds == favoriteIds) {
+                return
+            }
+            if (loadedFavoriteIds.containsAll(favoriteIds)) {
+                favoritesJob?.cancel()
+                val remainingCoins = ArrayList<Coin>(favoriteIds.size)
+                for (coinItem in uiState.favoriteCoins) {
+                    if (favoriteIds.contains(coinItem.id)) {
+                        remainingCoins.add(coinItem)
+                    }
+                }
+                loadedFavoriteIds = HashSet<String>(favoriteIds)
+                uiState = uiState.copy(
+                    favoriteCoins = remainingCoins,
+                    isFavoritesLoading = false,
+                    favoritesErrorMessage = ""
+                )
+                return
+            }
+        }
+
+        favoritesJob?.cancel()
+        favoritesJob = viewModelScope.launch {
             uiState = uiState.copy(isFavoritesLoading = true, favoritesErrorMessage = "")
             try {
                 val idsBuilder = StringBuilder()
@@ -108,17 +150,21 @@ class CoinListViewModel : ViewModel() {
                     )
                     val seenCoinIds = HashSet<String>(responseList.size)
                     for (coinResponse in responseList) {
-                        if (seenCoinIds.add(coinResponse.id)) {
+                        if (coinResponse.id.isNotEmpty() && seenCoinIds.add(coinResponse.id)) {
                             loadedFavorites.add(coinResponse.toCoin())
                         }
                     }
                 }
 
+                loadedFavoriteIds = HashSet<String>(favoriteIds)
                 uiState = uiState.copy(
                     favoriteCoins = loadedFavorites,
+                    loadedFavoritesCurrency = currency,
                     isFavoritesLoading = false,
                     favoritesErrorMessage = ""
                 )
+            } catch (cancelledError: CancellationException) {
+                throw cancelledError
             } catch (serializationError: SerializationException) {
                 uiState = uiState.copy(
                     isFavoritesLoading = false,
@@ -144,22 +190,31 @@ class CoinListViewModel : ViewModel() {
         }
     }
 
-    fun loadCoins(currency: String, forceReload: Boolean = false, isPullRefresh: Boolean = false) {
+    fun loadCoins(
+        currency: String,
+        forceReload: Boolean = false,
+        isPullRefresh: Boolean = false,
+        cancelPendingSearch: Boolean = true
+    ) {
         val trimmedQuery = uiState.searchQuery.trim()
 
         if (!forceReload &&
-            uiState.coins.isNotEmpty() &&
             uiState.loadedCurrency == currency &&
-            uiState.loadedQuery == trimmedQuery
+            uiState.loadedQuery == trimmedQuery &&
+            uiState.errorMessage.isEmpty()
         ) {
             return
         }
 
-        viewModelScope.launch {
+        if (cancelPendingSearch) {
+            searchJob?.cancel()
+        }
+        catalogJob?.cancel()
+        catalogJob = viewModelScope.launch {
             if (isPullRefresh) {
-                uiState = uiState.copy(isRefreshing = true, errorMessage = "")
+                uiState = uiState.copy(isLoading = false, isRefreshing = true, errorMessage = "")
             } else {
-                uiState = uiState.copy(isLoading = true, errorMessage = "")
+                uiState = uiState.copy(isLoading = true, isRefreshing = false, errorMessage = "")
             }
 
             try {
@@ -173,7 +228,7 @@ class CoinListViewModel : ViewModel() {
                     val seenCoinIds = HashSet<String>(responseList.size)
 
                     for (coinResponse in responseList) {
-                        if (seenCoinIds.add(coinResponse.id)) {
+                        if (coinResponse.id.isNotEmpty() && seenCoinIds.add(coinResponse.id)) {
                             loadedCoins.add(coinResponse.toCoin())
                         }
                     }
@@ -186,11 +241,13 @@ class CoinListViewModel : ViewModel() {
 
                     coroutineScope {
                         val deferredDetails = ArrayList<Deferred<CoinDetailResponse?>>(requestCount)
-                        for (index in 0 until requestCount) {
-                            val coinId = loadedCoins[index].id
+                        for (coinIndex in 0 until requestCount) {
+                            val coinId = loadedCoins[coinIndex].id
                             val deferred = async {
                                 try {
                                     coinGeckoApi.getCoinDetail(BuildConfig.COINGECKO_API_KEY, coinId)
+                                } catch (cancelledError: CancellationException) {
+                                    throw cancelledError
                                 } catch (detailError: Exception) {
                                     null
                                 }
@@ -198,11 +255,11 @@ class CoinListViewModel : ViewModel() {
                             deferredDetails.add(deferred)
                         }
 
-                        for (index in 0 until requestCount) {
-                            val detail = deferredDetails[index].await()
+                        for (coinIndex in 0 until requestCount) {
+                            val detail = deferredDetails[coinIndex].await()
                             if (detail != null) {
-                                val currentCoin = loadedCoins[index]
-                                loadedCoins[index] = currentCoin.copy(
+                                val currentCoin = loadedCoins[coinIndex]
+                                loadedCoins[coinIndex] = currentCoin.copy(
                                     price_change_percentage_7d = detail.market_data?.price_change_percentage_7d,
                                     genesis_date = detail.genesis_date ?: "",
                                     hashing_algorithm = detail.hashing_algorithm ?: ""
@@ -212,6 +269,7 @@ class CoinListViewModel : ViewModel() {
                     }
 
                     savedCatalogCoins = loadedCoins
+                    savedCatalogCurrency = currency
                 } else {
                     val searchResponse = coinGeckoApi.searchCoins(
                         apiKey = BuildConfig.COINGECKO_API_KEY,
@@ -225,8 +283,8 @@ class CoinListViewModel : ViewModel() {
 
                     if (maxSearchCount > 0) {
                         val idsBuilder = StringBuilder()
-                        for (index in 0 until maxSearchCount) {
-                            val coinId = searchItems[index].id
+                        for (searchIndex in 0 until maxSearchCount) {
+                            val coinId = searchItems[searchIndex].id
                             if (coinId.isNotEmpty()) {
                                 if (idsBuilder.isNotEmpty()) {
                                     idsBuilder.append(",")
@@ -244,7 +302,7 @@ class CoinListViewModel : ViewModel() {
                             )
                             val seenCoinIds = HashSet<String>(responseList.size)
                             for (coinResponse in responseList) {
-                                if (seenCoinIds.add(coinResponse.id)) {
+                                if (coinResponse.id.isNotEmpty() && seenCoinIds.add(coinResponse.id)) {
                                     loadedCoins.add(coinResponse.toCoin())
                                 }
                             }
@@ -260,6 +318,8 @@ class CoinListViewModel : ViewModel() {
                     loadedCurrency = currency,
                     loadedQuery = trimmedQuery
                 )
+            } catch (cancelledError: CancellationException) {
+                throw cancelledError
             } catch (serializationError: SerializationException) {
                 uiState = uiState.copy(
                     isLoading = false,

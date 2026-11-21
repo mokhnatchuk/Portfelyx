@@ -9,3 +9,8 @@
 local.properties
 .kotlin/
 docs/
+*.jks
+*.keystore
+*.apk
+*.aab
+mapping.txt

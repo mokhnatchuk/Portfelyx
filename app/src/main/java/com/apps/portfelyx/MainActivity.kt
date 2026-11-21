@@ -1,5 +1,7 @@
 package com.apps.portfelyx
 
+import android.content.res.Configuration
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,16 +16,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
@@ -44,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -61,12 +71,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -81,68 +93,127 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PortfelyxTheme {
-                val navController = rememberNavController()
                 val settingsViewModel: SettingsViewModel = viewModel()
                 val currency by settingsViewModel.currency.collectAsState()
                 val favoriteIds by settingsViewModel.favoriteIds.collectAsState()
                 val coinListViewModel: CoinListViewModel = viewModel()
 
-                LaunchedEffect(currency) {
-                    coinListViewModel.loadCoins(currency, forceReload = false)
-                }
+                val currentCurrency = currency
+                if (currentCurrency == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    val navController = rememberNavController()
 
-                NavHost(navController = navController, startDestination = "coins") {
-                    composable("coins") {
-                        CoinListScreen(
-                            viewModel = coinListViewModel,
-                            currency = currency,
-                            favoriteIds = favoriteIds,
-                            onToggleFavorite = { coinId ->
-                                settingsViewModel.toggleFavorite(coinId)
-                            },
-                            onItemClick = { coinId -> navController.navigate("coin/$coinId") },
-                            onFavoritesClick = { navController.navigate("favorites") },
-                            onSettingsClick = { navController.navigate("settings") }
-                        )
+                    LaunchedEffect(currentCurrency) {
+                        coinListViewModel.loadCoins(currentCurrency, forceReload = false)
                     }
-                    composable("favorites") {
-                        FavoriteCoinsScreen(
-                            viewModel = coinListViewModel,
-                            favoriteIds = favoriteIds,
-                            currency = currency,
-                            onItemClick = { coinId -> navController.navigate("coin/$coinId") },
-                            onToggleFavorite = { coinId ->
-                                settingsViewModel.toggleFavorite(coinId)
-                            },
-                            onCatalogClick = {
-                                navController.popBackStack("coins", inclusive = false)
-                            },
-                            onSettingsClick = { navController.navigate("settings") },
-                            onBackClick = { navController.navigateUp() }
-                        )
-                    }
-                    composable("coin/{coinId}") { backStackEntry ->
-                        val coinId = backStackEntry.arguments?.getString("coinId") ?: ""
-                        val isCoinFavorite = favoriteIds.contains(coinId)
-                        CoinDetailsScreen(
-                            coinId = coinId,
-                            currency = currency,
-                            isFavorite = isCoinFavorite,
-                            onToggleFavorite = {
-                                settingsViewModel.toggleFavorite(coinId)
-                            },
-                            onBackClick = { navController.navigateUp() },
-                            viewModel = coinListViewModel
-                        )
-                    }
-                    composable("settings") {
-                        SettingsScreen(
-                            currency = currency,
-                            onCurrencyChange = { selectedCurrency ->
-                                settingsViewModel.setCurrency(selectedCurrency)
-                            },
-                            onBackClick = { navController.navigateUp() }
-                        )
+
+                    NavHost(navController = navController, startDestination = "coins") {
+                        composable("coins") { backStackEntry ->
+                            CoinListScreen(
+                                viewModel = coinListViewModel,
+                                currency = currentCurrency,
+                                favoriteIds = favoriteIds,
+                                onToggleFavorite = { coinId ->
+                                    settingsViewModel.toggleFavorite(coinId)
+                                },
+                                onItemClick = { coinId ->
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        val encodedCoinId = Uri.encode(coinId)
+                                        navController.navigate("coin/$encodedCoinId") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onFavoritesClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.navigate("favorites") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onSettingsClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.navigate("settings") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        composable("favorites") { backStackEntry ->
+                            FavoriteCoinsScreen(
+                                viewModel = coinListViewModel,
+                                favoriteIds = favoriteIds,
+                                currency = currentCurrency,
+                                onItemClick = { coinId ->
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        val encodedCoinId = Uri.encode(coinId)
+                                        navController.navigate("coin/$encodedCoinId") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onToggleFavorite = { coinId ->
+                                    settingsViewModel.toggleFavorite(coinId)
+                                },
+                                onCatalogClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.popBackStack("coins", inclusive = false)
+                                    }
+                                },
+                                onSettingsClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.navigate("settings") {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                onBackClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.popBackStack()
+                                    }
+                                }
+                            )
+                        }
+                        composable("coin/{coinId}") { backStackEntry ->
+                            val coinId = backStackEntry.arguments?.getString("coinId") ?: ""
+                            val isCoinFavorite = favoriteIds.contains(coinId)
+                            CoinDetailsScreen(
+                                coinId = coinId,
+                                currency = currentCurrency,
+                                isFavorite = isCoinFavorite,
+                                onToggleFavorite = {
+                                    settingsViewModel.toggleFavorite(coinId)
+                                },
+                                onBackClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.popBackStack()
+                                    }
+                                },
+                                viewModel = coinListViewModel
+                            )
+                        }
+                        composable("settings") { backStackEntry ->
+                            SettingsScreen(
+                                currency = currentCurrency,
+                                onCurrencyChange = { selectedCurrency ->
+                                    settingsViewModel.setCurrency(selectedCurrency)
+                                },
+                                onBackClick = {
+                                    if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) {
+                                        navController.popBackStack()
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -151,6 +222,9 @@ class MainActivity : ComponentActivity() {
 }
 
 fun formatChangePercentage(changePercentage: Double): String {
+    if (!changePercentage.isFinite()) {
+        return "0.00%"
+    }
     if (changePercentage >= 0.0) {
         return "+%.2f%%".format(changePercentage)
     }
@@ -172,6 +246,7 @@ fun CoinListScreen(
     val uiState = viewModel.uiState
     val coins = uiState.coins
     val visibleCoins = ArrayList<Coin>(coins.size)
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     for (coin in coins) {
         if (uiState.selectedFilter == "Зростають") {
@@ -187,10 +262,27 @@ fun CoinListScreen(
         }
     }
 
+    val isWaitingForCurrency = uiState.loadedCurrency != currency
+    val displayCurrency = if (uiState.loadedCurrency.isNotEmpty()) {
+        uiState.loadedCurrency
+    } else {
+        currency
+    }
+
+    val cutoutInsets = WindowInsets.displayCutout
+    val scaffoldInsets = WindowInsets.systemBars.union(cutoutInsets)
+    val topBarInsets = TopAppBarDefaults.windowInsets.union(
+        cutoutInsets.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+    )
+    val bottomBarInsets = NavigationBarDefaults.windowInsets.union(
+        cutoutInsets.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+    )
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
+        contentWindowInsets = scaffoldInsets,
         topBar = {
             Column {
                 TopAppBar(
@@ -198,9 +290,12 @@ fun CoinListScreen(
                         Text(
                             text = "Portfelyx",
                             style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onBackground
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     },
+                    windowInsets = topBarInsets,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -223,7 +318,8 @@ fun CoinListScreen(
                 HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp
+                    tonalElevation = 0.dp,
+                    windowInsets = bottomBarInsets
                 ) {
                     val navItemColors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -255,61 +351,105 @@ fun CoinListScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            OutlinedTextField(
-                value = uiState.searchQuery,
-                onValueChange = { newText -> viewModel.updateSearchQuery(newText, currency) },
-                label = {
-                    Text(
-                        text = "Пошук монети",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                },
-                textStyle = MaterialTheme.typography.bodyLarge,
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                },
-                trailingIcon = {
-                    if (uiState.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearSearch(currency) }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Очистити")
-                        }
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary,
-                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
-                    unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    focusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    cursorColor = MaterialTheme.colorScheme.primary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            val searchFieldColors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                cursorColor = MaterialTheme.colorScheme.primary
             )
 
-            ChangeFilterRow(
-                options = changeFilters,
-                selected = uiState.selectedFilter,
-                onSelect = { newFilter -> viewModel.selectFilter(newFilter) },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = uiState.searchQuery,
+                        onValueChange = { newText -> viewModel.updateSearchQuery(newText, currency) },
+                        label = {
+                            Text(
+                                text = "Пошук монети",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            if (uiState.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.clearSearch(currency) }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Очистити")
+                                }
+                            }
+                        },
+                        colors = searchFieldColors,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    ChangeFilterRow(
+                        options = changeFilters,
+                        selected = uiState.selectedFilter,
+                        onSelect = { newFilter -> viewModel.selectFilter(newFilter) }
+                    )
+                }
+            } else {
+                OutlinedTextField(
+                    value = uiState.searchQuery,
+                    onValueChange = { newText -> viewModel.updateSearchQuery(newText, currency) },
+                    label = {
+                        Text(
+                            text = "Пошук монети",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (uiState.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearSearch(currency) }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Очистити")
+                            }
+                        }
+                    },
+                    colors = searchFieldColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+
+                ChangeFilterRow(
+                    options = changeFilters,
+                    selected = uiState.selectedFilter,
+                    onSelect = { newFilter -> viewModel.selectFilter(newFilter) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
 
             PullToRefreshBox(
                 isRefreshing = uiState.isRefreshing,
                 onRefresh = { viewModel.refreshCoins(currency) },
                 modifier = Modifier.fillMaxSize()
             ) {
-                if (uiState.isLoading) {
+                if (uiState.isLoading || (isWaitingForCurrency && uiState.errorMessage.isEmpty())) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -319,11 +459,13 @@ fun CoinListScreen(
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else if (uiState.errorMessage.isNotEmpty()) {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
                             .padding(16.dp),
-                        contentAlignment = Alignment.Center
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -367,11 +509,13 @@ fun CoinListScreen(
                 } else if (visibleCoins.isEmpty()) {
                     val trimmedSearch = uiState.searchQuery.trim()
                     if (trimmedSearch.isNotEmpty()) {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
                                 .padding(16.dp),
-                            contentAlignment = Alignment.Center
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -418,11 +562,13 @@ fun CoinListScreen(
                         } else {
                             "За обраним фільтром нічого не знайдено."
                         }
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
                                 .padding(16.dp),
-                            contentAlignment = Alignment.Center
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -459,11 +605,16 @@ fun CoinListScreen(
                     val bottomFadeBrush = Brush.verticalGradient(
                         colors = listOf(transparentBackgroundColor, backgroundColor)
                     )
+                    val fadeHeight = if (isLandscape) 16.dp else 28.dp
+                    val listVerticalPadding = if (isLandscape) 12.dp else 20.dp
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+                            contentPadding = PaddingValues(
+                                horizontal = 16.dp,
+                                vertical = listVerticalPadding
+                            ),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(
@@ -473,7 +624,7 @@ fun CoinListScreen(
                                 val isCoinFavorite = favoriteIds.contains(coinItem.id)
                                 CoinCard(
                                     coin = coinItem,
-                                    priceText = formatPrice(coinItem.current_price, currency),
+                                    priceText = formatPrice(coinItem.current_price, displayCurrency),
                                     isFavorite = isCoinFavorite,
                                     onFavoriteClick = { onToggleFavorite(coinItem.id) },
                                     onClick = { onItemClick(coinItem.id) }
@@ -484,7 +635,7 @@ fun CoinListScreen(
                         Spacer(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(28.dp)
+                                .height(fadeHeight)
                                 .align(Alignment.TopCenter)
                                 .background(brush = topFadeBrush)
                         )
@@ -492,7 +643,7 @@ fun CoinListScreen(
                         Spacer(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(28.dp)
+                                .height(fadeHeight)
                                 .align(Alignment.BottomCenter)
                                 .background(brush = bottomFadeBrush)
                         )
@@ -641,7 +792,8 @@ fun CoinCard(
                     text = priceText,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 IconButton(onClick = onFavoriteClick) {

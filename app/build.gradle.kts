@@ -12,6 +12,14 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 val coingeckoApiKey: String = localProperties.getProperty("coingecko.api.key", "")
+val releaseStoreFilePath: String = localProperties.getProperty("release.store.file", "").trim()
+val releaseStorePassword: String = localProperties.getProperty("release.store.password", "")
+val releaseKeyAlias: String = localProperties.getProperty("release.key.alias", "")
+val releaseKeyPassword: String = localProperties.getProperty("release.key.password", "")
+val hasReleaseSigning = releaseStoreFilePath.isNotEmpty() &&
+    releaseStorePassword.isNotEmpty() &&
+    releaseKeyAlias.isNotEmpty() &&
+    releaseKeyPassword.isNotEmpty()
 
 android {
     namespace = "com.apps.portfelyx"
@@ -24,15 +32,29 @@ android {
         minSdk = 29
         targetSdk = 37
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "COINGECKO_API_KEY", "\"$coingeckoApiKey\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFilePath)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
-                enable = false
+                enable = true
             }
         }
     }

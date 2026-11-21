@@ -1,12 +1,50 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
-#
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# Project specific R8 keep rules for Portfelyx.
+# AGP combines all .keep files in app/src/main/keepRules and passes them to R8.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Keep annotations, generic signatures, and inner classes needed by Retrofit and kotlinx.serialization
+-keepattributes *Annotation*, Signature, InnerClasses, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, Exceptions
+-dontnote kotlinx.serialization.AnnotationsKt
+
+# Keep kotlinx.serialization runtime Companion and serializer() entry points
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Keep @Serializable API models, their Companion objects, and generated $serializer classes
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinResponse { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinResponse$** { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.MarketDataResponse { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.MarketDataResponse$** { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinDetailResponse { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinDetailResponse$** { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.SearchCoinItem { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.SearchCoinItem$** { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinSearchResponse { *; }
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinSearchResponse$** { *; }
+
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1> {
+    static <1>$Companion Companion;
+}
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1>$Companion {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-if @kotlinx.serialization.Serializable class **
+-keep class <1>$*$serializer {
+    *;
+}
+
+# Keep Retrofit CoinGeckoApi interface, suspend methods, and Kotlin default-parameter bridge
+-keep,allowobfuscation,allowshrinking interface retrofit2.Call
+-keep,allowobfuscation,allowshrinking class retrofit2.Response
+
+-keep,includedescriptorclasses interface com.apps.portfelyx.CoinGeckoApi {
+    <methods>;
+}
+-keep,includedescriptorclasses class com.apps.portfelyx.CoinGeckoApi$DefaultImpls {
+    <methods>;
+}

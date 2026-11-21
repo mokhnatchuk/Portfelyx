@@ -31,7 +31,10 @@ val currencySymbols = mapOf("usd" to "$", "eur" to "€", "uah" to "₴")
 
 fun formatPrice(price: Double, currency: String): String {
     val symbol = currencySymbols[currency] ?: "$"
-    val rounded = if (price >= 100) {
+    if (!price.isFinite()) {
+        return "${symbol}0.00"
+    }
+    val rounded = if (price >= 100.0 || price <= -100.0) {
         "%.2f".format(price)
     } else {
         "%.4f".format(price)

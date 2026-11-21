@@ -12,16 +12,16 @@ import retrofit2.http.Query
 
 @Serializable
 data class CoinResponse(
-    val id: String,
-    val symbol: String,
-    val name: String,
-    val image: String = "",
-    val current_price: Double,
+    val id: String = "",
+    val symbol: String = "",
+    val name: String = "",
+    val image: String? = null,
+    val current_price: Double? = null,
     val price_change_percentage_24h: Double? = null,
-    val market_cap: Double = 0.0,
-    val total_volume: Double = 0.0,
-    val high_24h: Double = 0.0,
-    val low_24h: Double = 0.0
+    val market_cap: Double? = null,
+    val total_volume: Double? = null,
+    val high_24h: Double? = null,
+    val low_24h: Double? = null
 )
 
 @Serializable
@@ -48,7 +48,7 @@ data class CoinSearchResponse(
 )
 
 fun CoinResponse.toCoin(): Coin {
-    var cleanImageUrl = image.trim()
+    var cleanImageUrl = (image ?: "").trim()
     if (cleanImageUrl.startsWith("http://")) {
         cleanImageUrl = cleanImageUrl.replaceFirst("http://", "https://")
     }
@@ -58,12 +58,12 @@ fun CoinResponse.toCoin(): Coin {
         symbol = symbol,
         name = name,
         image = cleanImageUrl,
-        current_price = current_price,
+        current_price = current_price ?: 0.0,
         price_change_percentage_24h = price_change_percentage_24h ?: 0.0,
-        market_cap = market_cap,
-        total_volume = total_volume,
-        high_24h = high_24h,
-        low_24h = low_24h
+        market_cap = market_cap ?: 0.0,
+        total_volume = total_volume ?: 0.0,
+        high_24h = high_24h ?: 0.0,
+        low_24h = low_24h ?: 0.0
     )
 }
 
@@ -94,7 +94,10 @@ interface CoinGeckoApi {
     ): CoinDetailResponse
 }
 
-private val coinJson = Json { ignoreUnknownKeys = true }
+private val coinJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+}
 
 val coinGeckoApi: CoinGeckoApi = Retrofit.Builder()
     .baseUrl("https://api.coingecko.com/api/v3/")

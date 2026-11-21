@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,13 +18,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Notifications
@@ -59,9 +67,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -99,19 +109,49 @@ fun CoinDetailsScreen(
     viewModel: CoinListViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    var notificationStatusText by remember { mutableStateOf("") }
+    val uiState = viewModel.uiState
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var notificationState by remember { mutableStateOf("idle") }
 
     var selectedCoin: Coin? = null
-    for (item in viewModel.uiState.coins) {
-        if (item.id == coinId) {
-            selectedCoin = item
-            break
+    var displayCurrency = currency
+
+    if (uiState.loadedCurrency == currency) {
+        for (item in uiState.coins) {
+            if (item.id == coinId) {
+                selectedCoin = item
+                displayCurrency = uiState.loadedCurrency
+                break
+            }
+        }
+    }
+    if (selectedCoin == null && uiState.loadedFavoritesCurrency == currency) {
+        for (item in uiState.favoriteCoins) {
+            if (item.id == coinId) {
+                selectedCoin = item
+                displayCurrency = uiState.loadedFavoritesCurrency
+                break
+            }
         }
     }
     if (selectedCoin == null) {
-        for (item in viewModel.uiState.favoriteCoins) {
+        for (item in uiState.coins) {
             if (item.id == coinId) {
                 selectedCoin = item
+                if (uiState.loadedCurrency.isNotEmpty()) {
+                    displayCurrency = uiState.loadedCurrency
+                }
+                break
+            }
+        }
+    }
+    if (selectedCoin == null) {
+        for (item in uiState.favoriteCoins) {
+            if (item.id == coinId) {
+                selectedCoin = item
+                if (uiState.loadedFavoritesCurrency.isNotEmpty()) {
+                    displayCurrency = uiState.loadedFavoritesCurrency
+                }
                 break
             }
         }
@@ -122,100 +162,188 @@ fun CoinDetailsScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted && coin != null) {
-            val formattedPrice = formatPrice(coin.current_price, currency)
+            val formattedPrice = formatPrice(coin.current_price, displayCurrency)
             sendPriceNotification(context, coin.name, formattedPrice)
-            notificationStatusText = "Сповіщення з ціною надіслано."
+            notificationState = "sent"
         } else {
-            notificationStatusText = "Дозвіл на сповіщення відхилено."
+            notificationState = "denied"
         }
     }
 
-    val topGlowColor = if (coin == null) {
-        MaterialTheme.colorScheme.background.copy(alpha = 0f)
-    } else if (coin.price_change_percentage_24h >= 0.0) {
-        MaterialTheme.colorScheme.tertiary
-    } else {
-        MaterialTheme.colorScheme.error
-    }
-
-    val topGlowBrush = Brush.verticalGradient(
-        colors = listOf(
-            topGlowColor.copy(alpha = 0.24f),
-            topGlowColor.copy(alpha = 0.08f),
-            MaterialTheme.colorScheme.background.copy(alpha = 0f)
-        )
+    val cutoutInsets = WindowInsets.displayCutout
+    val scaffoldInsets = WindowInsets.systemBars.union(cutoutInsets)
+    val topBarInsets = TopAppBarDefaults.windowInsets.union(
+        cutoutInsets.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        if (coin != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(340.dp)
-                    .background(brush = topGlowBrush)
-            )
-        }
-
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
-            contentColor = MaterialTheme.colorScheme.onBackground,
-            topBar = {
-                Column {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = coin?.name ?: "Монета",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                            titleContentColor = MaterialTheme.colorScheme.onBackground,
-                            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        navigationIcon = {
-                            IconButton(onClick = onBackClick) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                            }
-                        },
-                        actions = {
-                            if (coin != null) {
-                                IconButton(onClick = onToggleFavorite) {
-                                    if (isFavorite) {
-                                        Icon(
-                                            imageVector = Icons.Default.Favorite,
-                                            contentDescription = "Прибрати з добірки",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.FavoriteBorder,
-                                            contentDescription = "Додати в добірку",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        contentWindowInsets = scaffoldInsets,
+        topBar = {
+            Column {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = coin?.name ?: "Монета",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    windowInsets = topBarInsets,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        }
+                    },
+                    actions = {
+                        if (coin != null) {
+                            IconButton(onClick = onToggleFavorite) {
+                                if (isFavorite) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = "Прибрати з добірки",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.FavoriteBorder,
+                                        contentDescription = "Додати в добірку",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
-                    )
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+                    }
+                )
+                HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+            }
+        }
+    ) { innerPadding ->
+        if (coin == null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Монету не знайдено",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
-        ) { innerPadding ->
-            if (coin == null) {
-                Box(
+        } else {
+            val currentPriceText = formatPrice(coin.current_price, displayCurrency)
+            val fallbackPainter = painterResource(id = coinIcon(coin.id))
+            val change24hColor = if (coin.price_change_percentage_24h >= 0.0) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+            val heroTintColor = if (coin.price_change_percentage_24h >= 0.0) {
+                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.14f)
+            } else {
+                MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+            }
+            val heroCardBrush = Brush.verticalGradient(
+                colors = listOf(
+                    heroTintColor,
+                    MaterialTheme.colorScheme.surface
+                )
+            )
+            val backgroundColor = MaterialTheme.colorScheme.background
+            val transparentBackgroundColor = backgroundColor.copy(alpha = 0f)
+            val topFadeBrush = Brush.verticalGradient(
+                colors = listOf(backgroundColor, transparentBackgroundColor)
+            )
+            val bottomFadeBrush = Brush.verticalGradient(
+                colors = listOf(transparentBackgroundColor, backgroundColor)
+            )
+            val fadeHeight = if (isLandscape) 16.dp else 24.dp
+            val verticalContentPadding = if (isLandscape) 16.dp else 20.dp
+
+            val marketCapText = if (coin.market_cap > 0.0) {
+                "${formatPrice(coin.market_cap / 1_000_000_000, displayCurrency)} млрд"
+            } else {
+                "—"
+            }
+            val totalVolumeText = if (coin.total_volume > 0.0) {
+                "${formatPrice(coin.total_volume / 1_000_000_000, displayCurrency)} млрд"
+            } else {
+                "—"
+            }
+            val high24hText = if (coin.high_24h > 0.0) {
+                formatPrice(coin.high_24h, displayCurrency)
+            } else {
+                "—"
+            }
+            val low24hText = if (coin.low_24h > 0.0) {
+                formatPrice(coin.low_24h, displayCurrency)
+            } else {
+                "—"
+            }
+
+            val onSendNotificationClick = {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    val status = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    )
+                    if (status == PackageManager.PERMISSION_GRANTED) {
+                        sendPriceNotification(context, coin.name, currentPriceText)
+                        notificationState = "sent"
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                } else {
+                    sendPriceNotification(context, coin.name, currentPriceText)
+                    notificationState = "sent"
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = verticalContentPadding),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -227,51 +355,10 @@ fun CoinDetailsScreen(
                         ),
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Монету не знайдено",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            } else {
-                val currentPriceText = formatPrice(coin.current_price, currency)
-                val fallbackPainter = painterResource(id = coinIcon(coin.id))
-                val change24hColor = if (coin.price_change_percentage_24h >= 0.0) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    MaterialTheme.colorScheme.error
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                    ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(brush = heroCardBrush)
                                 .padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -349,14 +436,14 @@ fun CoinDetailsScreen(
                     ) {
                         CoinMetricCard(
                             label = "Капіталізація",
-                            value = "${formatPrice(coin.market_cap / 1_000_000_000, currency)} млрд",
+                            value = marketCapText,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
                         )
                         CoinMetricCard(
                             label = "Обсяг (24 год)",
-                            value = "${formatPrice(coin.total_volume / 1_000_000_000, currency)} млрд",
+                            value = totalVolumeText,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -371,14 +458,14 @@ fun CoinDetailsScreen(
                     ) {
                         CoinMetricCard(
                             label = "Максимум (24 год)",
-                            value = formatPrice(coin.high_24h, currency),
+                            value = high24hText,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
                         )
                         CoinMetricCard(
                             label = "Мінімум (24 год)",
-                            value = formatPrice(coin.low_24h, currency),
+                            value = low24hText,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -453,60 +540,90 @@ fun CoinDetailsScreen(
                         }
                     }
 
-                    Button(
-                        onClick = {
-                            if (Build.VERSION.SDK_INT >= 33) {
-                                val status = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.POST_NOTIFICATIONS
-                                )
-                                if (status == PackageManager.PERMISSION_GRANTED) {
-                                    sendPriceNotification(context, coin.name, currentPriceText)
-                                    notificationStatusText = "Сповіщення з ціною надіслано."
-                                } else {
-                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                }
-                            } else {
-                                sendPriceNotification(context, coin.name, currentPriceText)
-                                notificationStatusText = "Сповіщення з ціною надіслано."
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Надіслати ціну в сповіщення",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-
-                    if (notificationStatusText.isNotEmpty()) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    if (notificationState == "sent") {
+                        OutlinedButton(
+                            onClick = onSendNotificationClick,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.tertiary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = notificationStatusText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                text = "Сповіщення надіслано",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    } else if (notificationState == "denied") {
+                        OutlinedButton(
+                            onClick = onSendNotificationClick,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Дозвіл на сповіщення вимкнено",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = onSendNotificationClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Надіслати ціну в сповіщення",
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
                     }
                 }
+
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(fadeHeight)
+                        .align(Alignment.TopCenter)
+                        .background(brush = topFadeBrush)
+                )
+
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(fadeHeight)
+                        .align(Alignment.BottomCenter)
+                        .background(brush = bottomFadeBrush)
+                )
             }
         }
     }
@@ -569,18 +686,21 @@ fun CoinMetricRowCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
             )
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleSmall,
-                color = valueColor
+                color = valueColor,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f, fill = false)
             )
         }
     }
